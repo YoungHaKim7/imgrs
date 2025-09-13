@@ -60,16 +60,14 @@ impl Drop for TermState {
     fn drop(&mut self) {
         #[cfg(unix)]
         {
-            if let Ok(termios) =
-                <Box<dyn std::any::Any> as Clone>::clone(&self.0).downcast::<libc::termios>()
-            {
+            if let Some(termios) = self.0.downcast_ref::<libc::termios>() {
                 enable_echo_unix(*termios);
             }
         }
 
         #[cfg(windows)]
         {
-            if let Ok(mode) = self.0.downcast::<u32>() {
+            if let Some(mode) = self.0.downcast_ref::<u32>() {
                 enable_echo_windows(*mode);
             }
         }
