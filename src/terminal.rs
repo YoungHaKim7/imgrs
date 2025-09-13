@@ -1,4 +1,5 @@
 use anyhow::Result;
+use std::any::Any;
 use std::io::{self, IsTerminal};
 
 #[cfg(unix)]
@@ -53,44 +54,42 @@ fn get_terminal_size_windows() -> Result<(usize, usize)> {
     Ok((80, 24)) // Default fallback
 }
 
-pub trait TerminalState {}
+pub struct TermState(Box<dyn Any>);
 
-#[cfg(unix)]
-impl TerminalState for libc::termios {}
-
-#[cfg(windows)]
-impl TerminalState for u32 {}
-
-pub fn disable_echo() -> Box<dyn TerminalState> {
-    #[cfg(unix)]
-    {
-        disable_echo_unix()
-    }
-
-    #[cfg(windows)]
-    {
-        disable_echo_windows()
-    }
-}
-
-pub fn enable_echo(state: Box<dyn TerminalState>) {
-    #[cfg(unix)]
-    {
-        if let Ok(termios) = state.downcast::<libc::termios>() {
-            enable_echo_unix(*termios);
+impl Drop for TermState {
+    fn drop(&mut self) {
+        #[cfg(unix)]
+        {
+            if let Ok(termios) =
+                <Box<dyn std::any::Any> as Clone>::clone(&self.0).downcast::<libc::termios>()
+            {
+                enable_echo_unix(*termios);
+            }
         }
-    }
 
-    #[cfg(windows)]
-    {
-        if let Ok(mode) = state.downcast::<u32>() {
-            enable_echo_windows(*mode);
+        #[cfg(windows)]
+        {
+            if let Ok(mode) = self.0.downcast::<u32>() {
+                enable_echo_windows(*mode);
+            }
         }
     }
 }
 
+pub fn disable_echo() -> TermState {
+    #[cfg(unix)]
+    {
+        TermState(disable_echo_unix())
+    }
+
+    #[cfg(windows)]
+    {
+        TermState(disable_echo_windows())
+    }
+}
+
 #[cfg(unix)]
-fn disable_echo_unix() -> Box<dyn TerminalState> {
+fn disable_echo_unix() -> Box<dyn Any> {
     unsafe {
         let mut termios: libc::termios = std::mem::zeroed();
         let result = libc::tcgetattr(STDOUT_FILENO, &mut termios);
@@ -101,7 +100,7 @@ fn disable_echo_unix() -> Box<dyn TerminalState> {
             new_termios.c_lflag |= libc::ICANON | libc::ISIG;
             new_termios.c_iflag |= libc::ICRNL;
 
-            let _ = libc::tcsetattr(STDOUT_FILENO, libc::TCSETS, &new_termios);
+            let _ = libc::tcsetattr(STDOUT_FILENO, libc::TCSANOW, &new_termios);
             Box::new(termios)
         } else {
             Box::new(termios)
@@ -112,12 +111,12 @@ fn disable_echo_unix() -> Box<dyn TerminalState> {
 #[cfg(unix)]
 fn enable_echo_unix(termios: libc::termios) {
     unsafe {
-        let _ = libc::tcsetattr(STDOUT_FILENO, libc::TCSETS, &termios);
+        let _ = libc::tcsetattr(STDOUT_FILENO, libc::TCSANOW, &termios);
     }
 }
 
 #[cfg(windows)]
-fn disable_echo_windows() -> Box<dyn TerminalState> {
+fn disable_echo_windows() -> Box<dyn Any> {
     unsafe {
         let handle = GetStdHandle(STD_OUTPUT_HANDLE);
         let mut mode: u32 = 0;

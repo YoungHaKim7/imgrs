@@ -3,7 +3,9 @@ use clap::Parser;
 use image::Pixel;
 use image::{DynamicImage, GenericImageView, ImageFormat};
 use std::io::{self, Read};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
@@ -81,7 +83,7 @@ fn decode_image(buf: &[u8]) -> Result<Vec<ImageFrame>> {
 }
 
 fn decode_gif(buf: &[u8]) -> Result<Vec<ImageFrame>> {
-    let mut decoder = gif::DecodeOptions::new();
+    let decoder = gif::DecodeOptions::new();
     let mut decoder = decoder.read_info(buf)?;
 
     let mut frames = Vec::new();
@@ -230,24 +232,17 @@ fn print_frames(frames: Vec<Vec<String>>, silent: bool) -> Result<()> {
         }
     } else {
         // Setup signal handling for Ctrl+C
-        let (tx, rx) = mpsc::channel();
-        let tx_clone = tx.clone();
-
+        let playing = Arc::new(AtomicBool::new(true));
+        let p = playing.clone();
         ctrlc::set_handler(move || {
-            let _ = tx_clone.send(());
+            p.store(false, Ordering::SeqCst);
         })?;
 
         let frame_duration = Duration::from_millis(1000 / FPS);
         let h = frames[0].len() + if silent { 0 } else { NUM_ADDITIONAL_LINES };
-        let mut playing = true;
-
-        thread::spawn(move || {
-            let _ = rx.recv();
-            playing = false;
-        });
 
         let mut i = 0;
-        while playing {
+        while playing.load(Ordering::SeqCst) {
             if i != 0 {
                 print!("{}", format!("{}", format!("{} {}", ANSI_CURSOR_UP, h)));
             }
