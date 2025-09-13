@@ -3,9 +3,9 @@ use clap::Parser;
 use image::Pixel;
 use image::{DynamicImage, GenericImageView, ImageFormat};
 use std::io::{self, Read};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
-use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
@@ -176,10 +176,7 @@ fn escape_frames(frames: Vec<ImageFrame>) -> Vec<Vec<String>> {
                     if a < 128 {
                         line.push_str(ANSI_BG_TRANSPARENT_COLOR);
                     } else {
-                        line.push_str(&format!(
-                            "{}",
-                            format!("{} {} {} {}", ANSI_BG_RGB_COLOR, r, g, b)
-                        ));
+                        line.push_str(&format!("{} {} {} {}", ANSI_BG_RGB_COLOR, r, g, b));
                     }
 
                     // Lower pixel (foreground)
@@ -187,10 +184,7 @@ fn escape_frames(frames: Vec<ImageFrame>) -> Vec<Vec<String>> {
                     if a < 128 {
                         line.push_str(ANSI_FG_TRANSPARENT_COLOR);
                     } else {
-                        line.push_str(&format!(
-                            "{}",
-                            format!("{} {} {} {}", ANSI_FG_RGB_COLOR, r, g, b)
-                        ));
+                        line.push_str(&format!("{} {} {} {}", ANSI_FG_RGB_COLOR, r, g, b));
                     }
                 }
 
@@ -244,7 +238,7 @@ fn print_frames(frames: Vec<Vec<String>>, silent: bool) -> Result<()> {
         let mut i = 0;
         while playing.load(Ordering::SeqCst) {
             if i != 0 {
-                print!("{}", format!("{}", format!("{} {}", ANSI_CURSOR_UP, h)));
+                print!("{}", format!("{} {}", ANSI_CURSOR_UP, h));
             }
 
             for line in &frames[i % frame_count] {
